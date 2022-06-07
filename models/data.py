@@ -1,24 +1,27 @@
 import os
 import numpy as np
 import pandas as pd
+import sys
+sys.path.append('../')
 from sklearn import neighbors
 from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
-from transformers import AutoTokenizer 
 from sklearn.preprocessing import StandardScaler
 
-from .config import cfg
-
 class DATA:
-    def __init__(self, cfg, data_path):
+    def __init__(self, cfg):
         self.cfg = cfg
-        self.tokenizer = AutoTokenizer.from_pretrained(self.cfg.DATA.TOKENIZER_PATH)
-        self.data_path = data_path
-        if self.cfg.MODEL.IS_TRAIN:
-            self.train_data = self.load_data(self.cfg.DATA.TRAIN_FILE)
-            self.pairs_data = self.load_data(self.cfg.DATA.PAIRS_FILE)
-        else:
-            self.test_data = self.load_data(self.cfg.DATA.TEST_FILE)
+        self.data_path = self.cfg.DATA.DATA_PATH
+        if not self.cfg.DATA.DATA_SAVED:
+            print("Loading data..., data path: ", self.data_path)
+            if self.cfg.MODEL.IS_TRAIN:
+                self.train_data = self.load_data(self.cfg.DATA.TRAIN_FILE)
+                self.pairs_data = self.load_data(self.cfg.DATA.PAIRS_FILE)
+                print("train_data: ", len(self.train_data))
+                print("pairs_data: ", len(self.pairs_data))
+            else:
+                self.test_data = self.load_data(self.cfg.DATA.TEST_FILE)
+                print("test_data: ", len(self.test_data))
 
     def load_data(self, filename):
         """
@@ -44,7 +47,7 @@ class DATA:
         assert self.cfg.MODEL.IS_TRAIN, "This function can only be used in training mode"
 
         # scale data for KNN 
-        scaler = StandardScaler
+        scaler = StandardScaler()
         scaled_data = scaler.fit_transform(self.train_data[knn_features])
         # fit KNN and predict indices
         knn_model = NearestNeighbors( 
@@ -75,8 +78,8 @@ class DATA:
                 ind1 = k
                 ind2 = neighbors[j]
                 if ind1 == ind2:
-                    print("indices are the same!")
-                
+                    # print("indices are the same!")
+                    continue                
                 tmp_dataset.append(np.concatenate([ data_features.iloc[ind1],
                                                     data_features.iloc[ind2]], 
                                                     axis = 0))
@@ -90,30 +93,6 @@ class DATA:
         for col in col_64:
             dataset[col] = dataset[col].astype(np.float32)
         return data_features, dataset
-
-    @staticmethod
-    def preprocess_data(self, data):
-        '''
-        preprocess the data input, for example, convert text to index with a tokenizer
-        @param:
-            data: data to preprocess
-        @return:
-            data: preprocessed data
-        '''
-        input_ids = []
-        for text in tqdm(data, total=len(data)):
-            inputs = self.tokenizer(
-                text, 
-                add_special_tokens=True,
-                padding = 'max_length',
-                truncation = True,
-                return_offsets_mapping = False,
-                max_length = self.cfg.DATA.PREPROCESS_MAX_LEN,
-                return_token_type_ids = False,
-                return_attention_mask = False,
-            )
-        return np.array(input_ids)
-
 
     def get_train_data(self):
         '''
@@ -151,6 +130,59 @@ class DATA:
         print("pairs_data_list: ", len(pairs_data_list))
         return pairs_data_list
     
+    def get_pair_train_data_dict(self, auto_gen = False, rounds = 2, n_neighbors = 10, features = ['id', 'latitude', 'longitude'], knn_features = ['latitude', 'longitude']):
+        '''
+        get the paired training data as directory format
+        @param:
+            auto_gen: whether to generate the data pairs from the train_data
+            rounds: number of rounds to generate test data
+            n_neighbors: number of neighbors to find
+            features: list of features to use
+            knn_features: list of features to use for KNN
+        @return:
+            pairs_data_list: list of data pairs
+            pairs_data_dict: dictionary of data pairs
+        '''
+
+        if self.cfg.DATA.DATA_SAVED and self.cfg.DATA.PAIRS_DATA_LIST != '' and self.cfg.DATA.PAIRS_DATA_DICT != '':
+            print("pairs_data_list and pairs_data_dict are already generated,load data...")
+            dict_load = np.load(self.cfg.DATA.PAIRS_DATA_DICT, allow_pickle = True)
+            print(dict_load)
+            return dict_load
+        pairs_data_list = self.get_pair_train_data(auto_gen, rounds, n_neighbors, features, knn_features)
+        print("organizing pairs_data_list as dictionary format: {'text': text, 'num_entities': num_entities, 'match': match}")
+        pairs_data_dict = []
+        for i in tqdm(range(len(pairs_data_list)), total = len(pairs_data_list)):
+            temp_dict = {}
+            temp_dict['text'] = ''
+            for col in [ i + '_1' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
+                temp_dict['text'] += str(pairs_data_list[i][col]) + " "
+            temp_dict['text'] += '</s> <s>'
+            for col in [ i + '_2' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
+                temp_dict['text'] += str(pairs_data_list[i][col]) + " "
+            temp_dict['text'] += '</s>'
+            # TODO: add the process for the numerical entities.
+            temp_dict['num_entities'] = {}
+            for col in [i + '_1' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE] +   [i + '_2' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE]:
+                temp_dict['num_entities'][col] = pairs_data_list[i][col]
+            temp_dict['match'] = pairs_data_list[i]['match']
+            
+            pairs_data_dict.append(temp_dict)
+
+        np.save(os.path.join(self.cfg.DATA.DATA_PATH, 
+                            'pairs_data_dict.npy'), 
+                pairs_data_dict)
+        np.save(os.path.join(self.cfg.DATA.DATA_PATH,
+                            'pairs_data_list.npy'),
+                pairs_data_list)
+        print("pairs_data_list and pairs_data_dict are generated, saved to {} and {}".format(os.path.join(self.cfg.DATA.DATA_PATH,
+                            'pairs_data_list.npy'), os.path.join(self.cfg.DATA.DATA_PATH, 
+                            'pairs_data_dict.npy')))
+
+        
+        return pairs_data_dict
+        
+
     def get_test_data(self):
         '''
         get the test data, and organize the test data into pairs
@@ -170,13 +202,38 @@ class DATA:
         print("test_data_list: ", len(test_data_list))
         return self.test_data_list
 
+
+    def get_test_data_dict(self):
+        '''
+        get the test data in dictionary format
+        '''
+        test_data_list = self.get_test_data()
+        
+        print("organizing test_data_list as dictionary format: {'text': text, 'num_entities': num_entities}")
+        test_data_dict = []
+        for i in tqdm(range(len(test_data_list)), total = len(test_data_list)):
+            temp_dict = {}
+            temp_dict['text']= ''
+            for col in [ i + '_1' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
+                temp_dict['text'] += str(test_data_list[i][col]) + " "
+            temp_dict['text'] += '</s> <s>'
+            for col in [ i + '_2' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
+                temp_dict['text'] += str(test_data_list[i][col]) + " "
+            temp_dict['text'] += '</s>'
+            
+            temp_dict['num_entities'] = {}
+            for col in [i + '_1' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE] +   [i + '_2' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE]:
+                temp_dict['num_entities'][col] = test_data_list[i][col]
+            test_data_dict.append(temp_dict)
+        return test_data_list, test_data_dict
     
+
     
 # TODO:
-# 1. 决定好用什么特征
+# 1. 决定好用什么特征  （除url外，其他文本特征均使用了，剩余的特征为数值特征）
 # 2. 对数据进行预处理，比如：
-#    a. 对数据进行分词
-#    b. 对数据进行编码
+#    a. 对数据进行分词 
+#    b. 对数据进行编码 
 # 3. 使用数据进行训练，训练一个文本相似度模型（可作为baseline提交，将这个任务看做是短文本匹配的任务）
 # 4. 使用数据进行预测，预测一个文本相似度，并且提交结果
 # 5. 使用决策树等模型进一步进行匹配度计算，并且提交结果，可以将文本相似匹配度看做是一个增强特征
