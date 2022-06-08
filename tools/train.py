@@ -12,6 +12,29 @@ from tqdm import tqdm
 import numpy as np
 import pickle as pkl
 
+def cal_accuracy(output, target, threshold):
+    """
+    Calculate the accuracy
+    @param:
+        output: model output
+        target: target
+        threshold: threshold to filter the predictions
+    @return:
+        accuracy: accuracy
+    """
+    # set accuracy
+    accuracy = 0
+    # set output
+    output = output.detach().cpu().numpy()
+    # set target
+    target = target.detach().cpu().numpy()
+    # filter the predictions
+    output[output < threshold] = 0
+    output[output >= threshold] = 1
+    # set accuracy
+    accuracy = np.sum(output == target)
+    # return accuracy
+    return accuracy
 
 def validate(model, valid_data, threshold = None):
     """
@@ -36,7 +59,7 @@ def validate(model, valid_data, threshold = None):
             # set output
             output = model(input)
             # set accuracy
-            accuracy += accuracy(output, target, threshold)
+            accuracy += cal_accuracy(output, target, threshold)
     # set accuracy
     accuracy = accuracy / len(valid_data)
     # print accuracy
@@ -155,9 +178,6 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         
     # save model
     model.save_model(model_path+'_final') 
-
-
-
 
 
 def main(cfg):

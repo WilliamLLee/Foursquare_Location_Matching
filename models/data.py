@@ -190,7 +190,6 @@ class DATA:
         
         return pairs_data_dict
         
-
     def get_test_data(self):
         '''
         get the test data, and organize the test data into pairs
@@ -209,7 +208,6 @@ class DATA:
 
         print("test_data_list: ", len(test_data_list))
         return self.test_data_list
-
 
     def get_test_data_dict(self):
         '''
@@ -236,7 +234,6 @@ class DATA:
         return test_data_list, test_data_dict
     
 
-    
 # TODO:
 # 1. 决定好用什么特征  （除url外，其他文本特征均使用了，剩余的特征为数值特征）
 # 2. 对数据进行预处理，比如：

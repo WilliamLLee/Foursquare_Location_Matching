@@ -3,8 +3,8 @@ import torch
 import sys
 sys.path.append('../')
 from transformers import AutoTokenizer, AutoModelForMaskedLM
-from torch.utils.data import DataLoader, TensorDataset
-from tqdm import tqdm
+import torch.nn as nn
+import torch.nn.functional as F
 
 class LM(torch.nn.Module):
     def __init__(self, cfg):
@@ -12,43 +12,13 @@ class LM(torch.nn.Module):
         self.cfg = cfg
         self.transformer = AutoModelForMaskedLM.from_pretrained(self.cfg.MODEL.PRETRAINED_MODEL_PATH, output_hidden_states=True, output_attentions=True)
         self.tokenizer = AutoTokenizer.from_pretrained(self.cfg.DATA.TOKENIZER_PATH)
-        self.linear_relu_stack = torch.nn.Sequential(
-            torch.nn.Linear(self.cfg.MODEL.INPUT_DIM, 1024),
-            torch.nn.ReLU(),
-            torch.nn.Dropout(p=self.cfg.MODEL.DROPOUT_RATE1),
-            torch.nn.BatchNorm1d(1024),
-            torch.nn.Linear(1024, 512),
-            torch.nn.ReLU(),
-            torch.nn.Dropout(p=self.cfg.MODEL.DROPOUT_RATE2),
-            torch.nn.BatchNorm1d(512),
-            torch.nn.Linear(512, 256),
-            torch.nn.ReLU(),
-            torch.nn.Dropout(p=self.cfg.MODEL.DROPOUT_RATE3),
-            torch.nn.BatchNorm1d(256),
-            torch.nn.Linear(256, self.cfg.MODEL.OUTPUT_DIM),
-        )
-        self.sigmoid = torch.nn.Sigmoid()
-    
-    @staticmethod
-    def tokenizer(self, text):
-        '''
-        tokenize the text
-        @param:
-            text: text to be tokenized
-        @return:
-            tokenized_text: tokenized text
-        '''
-        tokenized_text = self.tokenizer(
-                text, 
-                add_special_tokens=True,
-                padding = 'max_length',
-                truncation = True,
-                return_offsets_mapping = False,
-                max_length = self.cfg.DATA.PREPROCESS_MAX_LEN,
-                return_token_type_ids = False,
-                return_attention_mask = False,
-            )
-        return tokenized_text
+        self.linear_1 = nn.Linear(self.cfg.MODEL.INPUT_DIM, 1024)
+        self.batch_norm_1 = nn.BatchNorm1d(1024)
+        self.linear_2 = nn.Linear(1024, 512)
+        self.batch_norm_2 = nn.BatchNorm1d(512)
+        self.linear_3 = nn.Linear(512, 256)
+        self.batch_norm_3 = nn.BatchNorm1d(256)
+        self.linear_4 = nn.Linear(256, cfg.MODEL.OUTPUT_DIM)
 
     def forward(self, input):
         """
@@ -65,9 +35,17 @@ class LM(torch.nn.Module):
         output = output.reshape(output.shape[0], -1)
         print(output.shape)
         # linear layer to get the predictions
-        output = self.linear_relu_stack(output)
-        print(output.shape)
-        output = self.sigmoid(output)
+        output = F.relu(self.linear_1(output))
+        output = self.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE1)
+        output = self.batch_norm_1(output)
+        output = F.relu(self.linear_2(output))
+        output = self.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE2)
+        output = self.batch_norm_2(output)
+        output = F.relu(self.linear_3(output))
+        output = self.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE3)
+        output = self.batch_norm_3(output)
+        output = self.linear_4(output)
+        output = F.sigmoid(output)
         return output
 
     def predict(self, input_data, threshold = None):
@@ -83,7 +61,7 @@ class LM(torch.nn.Module):
             threshold = self.cfg.MODEL.THRESHOLD
         # predict
         with torch.no_grad():
-            output = self(input_data)
+            output = self.forward(input_data)
         # filter the predictions by threshold
         predictions = self.filter_predictions(output, threshold)
         return predictions
