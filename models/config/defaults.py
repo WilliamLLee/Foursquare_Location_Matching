@@ -4,7 +4,7 @@ _C = CN()
 
 # data path
 _C.DATA = CN()
-_C.DATA.DATA_PATH = 'F:\Foursquare_Location_Matching/dataset'
+_C.DATA.DATA_PATH = '../dataset'
 _C.DATA.FEATURES = [
     'id',
     'name',
@@ -39,7 +39,7 @@ _C.DATA.TEXT_FEATURE_TYPE = ['name', 'address', 'city', 'state', 'country','cate
 _C.DATA.NUMERICAL_FEATURE_TYPE = ['latitude', 'longitude', 'zip', 'phone']
 
 _C.DATA.PREPROCESS_MAX_LEN = 150
-_C.DATA.TOKENIZER_PATH = 'F:\Foursquare_Location_Matching/models/xlm-roberta-base'
+_C.DATA.TOKENIZER_PATH = '../models/xlm-roberta-base'
 
 # files names  
 _C.DATA.TEST_FILE = 'test.csv'
@@ -49,8 +49,8 @@ _C.DATA.PAIRS_FILE = 'pairs.csv'
 
 # saved data 
 _C.DATA.DATA_SAVED = True
-_C.DATA.PAIRS_DATA_DICT = 'F:\Foursquare_Location_Matching/dataset/pairs_data_dict.npy'
-_C.DATA.PAIRS_DATA_LIST = 'F:\Foursquare_Location_Matching/dataset/pairs_data_list.npy'
+_C.DATA.PAIRS_DATA_DICT = '../dataset/pairs_data_dict.npy'
+_C.DATA.PAIRS_DATA_LIST = '../dataset/pairs_data_list.npy'
 # _C.DATA.PAIRS_DATA_DICT = ''
 # _C.DATA.PAIRS_DATA_LIST = ''
 
@@ -58,7 +58,7 @@ _C.DATA.PAIRS_DATA_LIST = 'F:\Foursquare_Location_Matching/dataset/pairs_data_li
 # model config
 _C.MODEL = CN()
 _C.MODEL.IS_TRAIN = True
-_C.MODEL.PRETRAINED_MODEL_PATH = 'F:\Foursquare_Location_Matching/models/xlm-roberta-base'
+_C.MODEL.PRETRAINED_MODEL_PATH = '../models/xlm-roberta-base'
 _C.MODEL.PRETRAINED_MODEL_NAME = 'xlm-roberta-base'
 _C.MODEL.DROPOUT_RATE1 = 0.15
 _C.MODEL.DROPOUT_RATE2 = 0.20

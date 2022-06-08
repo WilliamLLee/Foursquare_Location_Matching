@@ -1,12 +1,8 @@
-from copyreg import pickle
 import sys
-sys.path.append('F:/Foursquare_Location_Matching/')
-
+sys.path.append('../')
 import torch
 from models.config.defaults import cfg
 from models.LM import LM
-from models.data import DATA
-from transformers import AutoTokenizer
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 import numpy as np
@@ -181,38 +177,9 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
 
 
 def main(cfg):
-    # load data
-    # D = DATA(cfg)
+    # train codes
     # load model
     model = LM(cfg)
-    
-    # data = D.get_pair_train_data_dict(auto_gen=True, rounds = 2, n_neighbors = 5, features = cfg.DATA.FEATURES)
-    
-    # tokenizer = AutoTokenizer.from_pretrained(cfg.DATA.TOKENIZER_PATH)
-
-    # text = []
-    # match = []
-    # for  i in tqdm(range(len(data)//32)):
-    #     text.append(tokenizer(
-    #             data[i]['text'],
-    #             add_special_tokens=True,
-    #             padding = 'max_length',
-    #             truncation = True,
-    #             return_offsets_mapping = False,
-    #             max_length = cfg.DATA.PREPROCESS_MAX_LEN,
-    #             return_token_type_ids = False,
-    #             return_attention_mask = False,
-    #             return_tensors = 'pt',
-    #         ))
-    #     match.append(data[i]['match'])
-    
-    # print(data[0]['text'], data[0]['match'])
-    # print(text[0], match[0])
-
-    # train_dataset = {'text': text, 'match': match}
-    # file= open('F:/Foursquare_Location_Matching/dataset/train_dataset_1_32.pkl', 'wb')
-    # pkl.dump(train_dataset, file)
-    
     train_dataset = pkl.load(open('F:/Foursquare_Location_Matching/dataset/train_dataset_4000.pkl', 'rb'))
     
     text, match = train_dataset['text'][:200], train_dataset['match'][:200]

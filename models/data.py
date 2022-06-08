@@ -2,9 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import sys
-from regex import P
 sys.path.append('../')
-from sklearn import neighbors
 from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
