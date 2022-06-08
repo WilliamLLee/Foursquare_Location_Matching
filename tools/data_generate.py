@@ -41,9 +41,10 @@ def main(cfg):
             text = []
             match = []
             gc.collect()
+    
     path = '../dataset/train_dataset_last_'+str(len(text))+'.pkl'
     pkl.dump({'text':text, 'match':match}, open(path, 'wb'))
-
+    # finished in about 18 minutes
 
 if __name__ == "__main__":
     main(cfg)
