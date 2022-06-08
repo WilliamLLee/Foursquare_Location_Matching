@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import sys
+from regex import P
 sys.path.append('../')
 from sklearn import neighbors
 from tqdm import tqdm
@@ -147,8 +148,15 @@ class DATA:
         if self.cfg.DATA.DATA_SAVED and self.cfg.DATA.PAIRS_DATA_LIST != '' and self.cfg.DATA.PAIRS_DATA_DICT != '':
             print("pairs_data_list and pairs_data_dict are already generated,load data...")
             dict_load = np.load(self.cfg.DATA.PAIRS_DATA_DICT, allow_pickle = True)
-            print(dict_load)
-            return dict_load
+            list_load = np.load(self.cfg.DATA.PAIRS_DATA_LIST, allow_pickle = True)
+            print("pairs_data_list: ", len(list_load))
+            print(list_load[-10:])
+            print("only return the 'text' and 'match' columns")
+            dict_return = []
+            for i in tqdm(range(len(dict_load))):
+                dict_return.append({'text': dict_load[i]['text'], 'match': dict_load[i]['match']})    
+            return dict_return
+
         pairs_data_list = self.get_pair_train_data(auto_gen, rounds, n_neighbors, features, knn_features)
         print("organizing pairs_data_list as dictionary format: {'text': text, 'num_entities': num_entities, 'match': match}")
         pairs_data_dict = []
