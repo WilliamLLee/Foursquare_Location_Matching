@@ -32,10 +32,12 @@ def cal_accuracy(output, target, threshold):
     # return accuracy
     return accuracy
 
-def validate(model, valid_data, threshold = None):
+def validate(model, device, valid_data, threshold = None):
     """
     Validate the model and caculate the accuracy
     @param:
+        model: model
+        device: device
         valid_data: list of valid data
         threshold: threshold to filter the predictions
     """
@@ -44,7 +46,7 @@ def validate(model, valid_data, threshold = None):
     # caculate the accuracy
     accuracy = 0
     # set batch generator
-    batch_generator = batch_generator(valid_data, cfg.MODEL.BATCH_SIZE, shuffle=False)
+    batch_generator = batch_generator(valid_data, cfg.MODEL.BATCH_SIZE, device,shuffle=False)
     # validate
     with torch.no_grad():
         for idx, (text, match) in enumerate(batch_generator):
@@ -61,18 +63,19 @@ def validate(model, valid_data, threshold = None):
     # print accuracy
     print('Validation accuracy: {}'.format(accuracy))
 
-def batch_generator(data, batch_size, shuffle=False):
+def batch_generator(data, batch_size, device,shuffle=False):
     """
     Generate batch data
     @param:
         data: list of data
         batch_size: batch size
+        device: device
         shuffle: whether to shuffle
     @return:
         batch: batch data
     """
     
-    data_t = TensorDataset(data[0], data[1])
+    data_t = TensorDataset(data[0].to(device), data[1].to(device))
     # set batch size
     batch_size = min(batch_size, len(data_t))
     # set batch generator
@@ -96,7 +99,10 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         valid_size: size of validation set
     """
     # set the device
-    device = torch.device(device)
+    if device == "cuda":
+        device = torch.device(device if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device(device)
     # set the model to device
     model.to(device)
     # set the parameters
@@ -137,11 +143,11 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         # set loss
         loss = 0
         # set batch generator
-        bg = batch_generator(train_data, batch_size, shuffle=True)
+        bg = batch_generator(train_data, batch_size, device,shuffle=True)
         # train
         with tqdm(total = len(train_data)/batch_size) as pbar:
             for idx, (text, match) in enumerate(bg):
-                # print(text, match)
+                print(text.shape, match.shape)
                 # set optimizer
                 optimizer.zero_grad()
                 # set input
@@ -169,7 +175,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         # save model
         if (epoch + 1) % save_every == 0:
             # validate the model
-            validate(model, valid_data)
+            validate(model, device, valid_data, threshold = 0.5)
             model.save_model(model_path+'_'+str(epoch+1))
         
     # save model
@@ -180,9 +186,9 @@ def main(cfg):
     # train codes
     # load model
     model = LM(cfg)
-    train_dataset = pkl.load(open('F:/Foursquare_Location_Matching/dataset/train_dataset_4000.pkl', 'rb'))
+    train_dataset = pkl.load(open('../dataset/train_dataset_4000.pkl', 'rb'))
     
-    text, match = train_dataset['text'][:200], train_dataset['match'][:200]
+    text, match = train_dataset['text'][:128], train_dataset['match'][:128]
     
     text_t = []
     match_t = []
@@ -195,7 +201,7 @@ def main(cfg):
 
     data_t = TensorDataset(text_t, match_t)
     # train model
-    train(cfg, model, data_t)
+    train(cfg, model, data_t, device = cfg.MODEL.DEVICE)
 
 if __name__ == "__main__":
     main(cfg)
