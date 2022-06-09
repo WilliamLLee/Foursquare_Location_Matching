@@ -5,7 +5,9 @@ from models.config.defaults import cfg
 from models.LM import LM
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
+from transformers import AutoModelForMaskedLM
 import numpy as np
+import os
 import pickle as pkl
 
 def cal_accuracy(output, target, threshold):
@@ -32,7 +34,7 @@ def cal_accuracy(output, target, threshold):
     # return accuracy
     return accuracy
 
-def validate(model, device, valid_data, threshold = None):
+def validate(model, transformer, device, valid_data, threshold = None):
     """
     Validate the model and caculate the accuracy
     @param:
@@ -46,20 +48,23 @@ def validate(model, device, valid_data, threshold = None):
     # caculate the accuracy
     accuracy = 0
     # set batch generator
-    batch_generator = batch_generator(valid_data, cfg.MODEL.BATCH_SIZE, device,shuffle=False)
+    bg = batch_generator(valid_data, cfg.MODEL.BATCH_SIZE, device,shuffle=False)
     # validate
     with torch.no_grad():
-        for idx, (text, match) in enumerate(batch_generator):
+        for idx, (text, match) in enumerate(bg):
             # set input
             input = text
             # set target
             target = match
             # set output
-            output = model(input)
+            output = transformer(input_ids = input)['hidden_states'][-1]
+            output = torch.mean(output, dim=1)
+            output = output.reshape(output.shape[0], -1)
+            output = model(output)
             # set accuracy
             accuracy += cal_accuracy(output, target, threshold)
     # set accuracy
-    accuracy = accuracy / len(valid_data)
+    accuracy = accuracy / len(bg)
     # print accuracy
     print('Validation accuracy: {}'.format(accuracy))
 
@@ -75,7 +80,7 @@ def batch_generator(data, batch_size, device,shuffle=False):
         batch: batch data
     """
     
-    data_t = TensorDataset(data[0].to(device), data[1].to(device))
+    data_t = TensorDataset(data[0], data[1])
     # set batch size
     batch_size = min(batch_size, len(data_t))
     # set batch generator
@@ -85,7 +90,7 @@ def batch_generator(data, batch_size, device,shuffle=False):
     # return batch generator
     return batch_generator
 
-def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size = None, learning_rate = None, weight_decay = None, model_path = None, save_every = None, valid_size = None):
+def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size = None, learning_rate = None, weight_decay = None, model_path = None, model_name = None, save_every = None, valid_size = None):
     """
     Train the model
     @param:
@@ -95,6 +100,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         learning_rate: learning rate
         weight_decay: weight decay
         model_path: path to save the model
+        model_name: name of the model
         save_every: save the model every x epoches
         valid_size: size of validation set
     """
@@ -105,6 +111,13 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         device = torch.device(device)
     # set the model to device
     model.to(device)
+    transformer = AutoModelForMaskedLM.from_pretrained(
+        cfg.MODEL.PRETRAINED_MODEL_PATH, 
+        output_hidden_states=True, 
+        output_attentions=True).to(device)
+
+    for param in transformer.parameters():
+        param.requires_grad = False
     # set the parameters
     if learning_rate is  None:
         learning_rate = cfg.MODEL.LR
@@ -118,6 +131,8 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         save_every = cfg.MODEL.SAVE_EVERY
     if model_path is  None:
         model_path = cfg.MODEL.MODEL_PATH
+    if model_name is  None:
+        model_name = cfg.MODEL.MODEL_NAME
     if valid_size is  None:
         valid_size = cfg.MODEL.VALID_SIZE
 
@@ -129,43 +144,47 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
     loss_fn = torch.nn.BCELoss()
     # set scheduler
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=save_every, gamma=0.1)
-
     # validate the model
+    train_data = TensorDataset(train_data[0].to(device), train_data[1].to(device))
     total = len(train_data)
     valid_size = int(total * valid_size)
     print("valid_size :" , valid_size)
     valid_data = train_data[-valid_size:]
     train_data = train_data[:-valid_size]
+
+    # set batch generator
+    bg = batch_generator(train_data, batch_size, device,shuffle=True)
     # train
     for epoch in range(max_epochs):
         # set train mode
         model.train()
         # set loss
-        loss = 0
-        # set batch generator
-        bg = batch_generator(train_data, batch_size, device,shuffle=True)
+        total_loss = 0  
         # train
         with tqdm(total = len(train_data)/batch_size) as pbar:
             for idx, (text, match) in enumerate(bg):
-                print(text.shape, match.shape)
                 # set optimizer
                 optimizer.zero_grad()
                 # set input
                 input = text
                 # set target
                 target = match
+
                 # set output
-                output = model(input)
+                output = transformer(input_ids = input)['hidden_states'][-1]
+                output = torch.mean(output, dim=1)
+                output = output.reshape(output.shape[0], -1)
+                output = model(output)
                 # set loss
-                loss += loss_fn(output, target)
+                loss = loss_fn(output, target)
                 # backward
                 loss.backward()
+                total_loss += loss.item()
                 # optimize
                 optimizer.step()
                 # update pbar
                 pbar.update(1)
-        # set scheduler
-        scheduler.step()
+
         # set loss
         loss = loss / len(train_data[0])
         # print loss
@@ -175,11 +194,11 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         # save model
         if (epoch + 1) % save_every == 0:
             # validate the model
-            validate(model, device, valid_data, threshold = 0.5)
-            model.save_model(model_path+'_'+str(epoch+1))
+            validate(model, transformer, device, valid_data, threshold = 0.5)
+            model.save_model(os.path.join(model_path, model_name+'_'+str(epoch+1)+'.pth'))
         
     # save model
-    model.save_model(model_path+'_final') 
+    model.save_model(os.path.join(model_path, model_name+'_final.pth')) 
 
 
 def main(cfg):
@@ -188,7 +207,7 @@ def main(cfg):
     model = LM(cfg)
     train_dataset = pkl.load(open('../dataset/train_dataset_4000.pkl', 'rb'))
     
-    text, match = train_dataset['text'][:128], train_dataset['match'][:128]
+    text, match = train_dataset['text'][:150], train_dataset['match'][:150]
     
     text_t = []
     match_t = []
@@ -199,7 +218,7 @@ def main(cfg):
     text_t = torch.tensor(text_t).reshape(len(text_t), -1)
     match_t = torch.tensor(match_t).reshape(len(match_t), -1)
 
-    data_t = TensorDataset(text_t, match_t)
+    data_t = (text_t, match_t)
     # train model
     train(cfg, model, data_t, device = cfg.MODEL.DEVICE)
 

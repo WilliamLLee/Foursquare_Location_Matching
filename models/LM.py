@@ -2,7 +2,6 @@ import os
 import torch 
 import sys
 sys.path.append('../')
-from transformers import AutoTokenizer, AutoModelForMaskedLM
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -10,8 +9,6 @@ class LM(torch.nn.Module):
     def __init__(self, cfg):
         super(LM, self).__init__()
         self.cfg = cfg
-        self.transformer = AutoModelForMaskedLM.from_pretrained(self.cfg.MODEL.PRETRAINED_MODEL_PATH, output_hidden_states=True, output_attentions=True)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.cfg.DATA.TOKENIZER_PATH)
         self.linear_1 = nn.Linear(self.cfg.MODEL.INPUT_DIM, 1024)
         self.batch_norm_1 = nn.BatchNorm1d(1024)
         self.linear_2 = nn.Linear(1024, 512)
@@ -28,24 +25,18 @@ class LM(torch.nn.Module):
         @return:
             predictions: list of predictions
         """
-        # predict
-        # output = self.tokenizer(input)
-        output = self.transformer(input_ids = input)['hidden_states'][-1]
-        print(output.shape)
-        output = output.reshape(output.shape[0], -1)
-        print(output.shape)
         # linear layer to get the predictions
-        output = F.relu(self.linear_1(output))
-        output = self.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE1)
+        output = F.relu(self.linear_1(input))
+        output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE1)
         output = self.batch_norm_1(output)
         output = F.relu(self.linear_2(output))
-        output = self.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE2)
+        output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE2)
         output = self.batch_norm_2(output)
         output = F.relu(self.linear_3(output))
-        output = self.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE3)
+        output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE3)
         output = self.batch_norm_3(output)
         output = self.linear_4(output)
-        output = F.sigmoid(output)
+        output = torch.sigmoid(output)
         return output
 
     def predict(self, input_data, threshold = None):
