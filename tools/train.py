@@ -51,20 +51,23 @@ def validate(model, transformer, device, valid_data, threshold = None):
     bg = batch_generator(valid_data, cfg.MODEL.BATCH_SIZE, device,shuffle=False)
     # validate
     with torch.no_grad():
-        for idx, (text, match) in enumerate(bg):
-            # set input
-            input = text
-            # set target
-            target = match
-            # set output
-            output = transformer(input_ids = input)['hidden_states'][-1]
-            output = torch.mean(output, dim=1)
-            output = output.reshape(output.shape[0], -1)
-            output = model(output)
-            # set accuracy
-            accuracy += cal_accuracy(output, target, threshold)
+        with tqdm(total=len(valid_data[0])) as pbar:
+            for idx, (text, match) in enumerate(bg):
+                # set input
+                input = text
+                # set target
+                target = match
+                # set output
+                output = transformer(input_ids = input)['hidden_states'][-1]
+                output = torch.mean(output, dim=1)
+                output = output.reshape(output.shape[0], -1)
+                output = model(output)
+                # set accuracy
+                accuracy += cal_accuracy(output, target, threshold)
+                # update progress bar
+                pbar.update(cfg.MODEL.BATCH_SIZE)
     # set accuracy
-    accuracy = accuracy / len(bg)
+    accuracy = accuracy / len(valid_data[0])
     # print accuracy
     print('Validation accuracy: {}'.format(accuracy))
 
@@ -152,16 +155,16 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
     valid_data = train_data[-valid_size:]
     train_data = train_data[:-valid_size]
 
-    # set batch generator
-    bg = batch_generator(train_data, batch_size, device,shuffle=True)
     # train
     for epoch in range(max_epochs):
         # set train mode
         model.train()
         # set loss
         total_loss = 0  
+        # set batch generator
+        bg = batch_generator(train_data, batch_size, device, shuffle=True)
         # train
-        with tqdm(total = len(train_data)/batch_size) as pbar:
+        with tqdm(total = len(train_data[0])) as pbar:
             for idx, (text, match) in enumerate(bg):
                 # set optimizer
                 optimizer.zero_grad()
@@ -169,7 +172,6 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
                 input = text
                 # set target
                 target = match
-
                 # set output
                 output = transformer(input_ids = input)['hidden_states'][-1]
                 output = torch.mean(output, dim=1)
@@ -183,8 +185,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
                 # optimize
                 optimizer.step()
                 # update pbar
-                pbar.update(1)
-
+                pbar.update(batch_size)
         # set loss
         loss = loss / len(train_data[0])
         # print loss
@@ -207,7 +208,7 @@ def main(cfg):
     model = LM(cfg)
     train_dataset = pkl.load(open('../dataset/train_dataset_4000.pkl', 'rb'))
     
-    text, match = train_dataset['text'][:150], train_dataset['match'][:150]
+    text, match = train_dataset['text'], train_dataset['match']
     
     text_t = []
     match_t = []
