@@ -66,12 +66,9 @@ class LM(torch.nn.Module):
         @return:
             filtered predictions: list of filtered predictions
         """
-        filtered_predictions = []
-        for prediction in predictions:
-            if prediction >= threshold:
-                filtered_predictions.append(1)
-            else:
-                filtered_predictions.append(0)
+        filtered_predictions = predictions.clone()
+        filtered_predictions[filtered_predictions < threshold] = 0
+        filtered_predictions[filtered_predictions >= threshold] = 1
         return filtered_predictions
     
     def save_model(self, model_path):

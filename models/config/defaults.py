@@ -80,4 +80,15 @@ _C.MODEL.VALID_SIZE = 0.1
 
 _C.MODEL.THRESHOLD = 0.5
 
+
+
+# test config
+_C.TEST = CN()
+_C.TEST.RESULT_PATH = '../dataset/test_result.csv'
+_C.TEST.MODEL_PATH = '../checkpoints/model_6.pth'
+_C.TEST.BEST_THRESHOLD = 0.45
+_C.TEST.BATCH_SIZE = 3
+_C.TEST.ROUNDS = 4
+_C.TEST.N_NEIGHBORS = 5
+
 cfg = _C

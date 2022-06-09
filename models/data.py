@@ -29,11 +29,12 @@ class DATA:
         if os.path.join(self.cfg.DATA.DATA_PATH, filename) is not None:
             return pd.read_csv(os.path.join(self.cfg.DATA.DATA_PATH, filename))
 
-    def genereate_data(self, rounds = 2, n_neighbors = 10, features = ['id', 'latitude', 'longitude'], knn_features = ['latitude', 'longitude']):
+    def genereate_data(self, input_data, rounds = 2, n_neighbors = 10, features = ['id', 'latitude', 'longitude'], knn_features = ['latitude', 'longitude']):
         """
         Generate data pairs for the model
         using the KNN to find the nearest neighbors that have the nearest latitude and longitude.
         @param:
+            input_data : data to generate data pairs for
             rounds: number of rounds to generate test data
             n_neighbors: number of neighbors to find
             features: list of features to use
@@ -43,11 +44,10 @@ class DATA:
         """
         assert rounds > 0, "rounds must be greater than 0"
         assert n_neighbors > 0, "n_neighbors must be greater than 0"
-        assert self.cfg.MODEL.IS_TRAIN, "This function can only be used in training mode"
 
         # scale data for KNN 
         scaler = StandardScaler()
-        scaled_data = scaler.fit_transform(self.train_data[knn_features])
+        scaled_data = scaler.fit_transform(input_data[knn_features])
         # fit KNN and predict indices
         knn_model = NearestNeighbors( 
             n_neighbors=n_neighbors, 
@@ -62,7 +62,7 @@ class DATA:
         indices = knn_model.kneighbors(scaled_data, return_distance=False)
 
         # generate data
-        data_features = self.train_data[features]
+        data_features = input_data[features]
         dataset = []
 
         for j in range(rounds):
@@ -77,7 +77,7 @@ class DATA:
                 ind1 = k
                 ind2 = neighbors[j]
                 if ind1 == ind2:
-                    # print("indices are the same!")
+                    # print("indices are the same!"), only for train data, skip the same indices
                     continue                
                 tmp_dataset.append(np.concatenate([ data_features.iloc[ind1],
                                                     data_features.iloc[ind2]], 
@@ -188,48 +188,75 @@ class DATA:
         
         return pairs_data_dict
         
-    def get_test_data(self):
+    def get_test_data_list(self, full_match = False, auto_gen = False, rounds = 9, n_neighbors = 10, features = ['id', 'latitude', 'longitude'], knn_features = ['latitude', 'longitude']):
         '''
         get the test data, and organize the test data into pairs
+        @param:
+            full_match: whether to use the full match method
+            auto_gen: whether to generate the data pairs from the train_data
+            rounds: number of rounds to generate test data
+            n_neighbors: number of neighbors to find
+            features: list of features to use
+            knn_features: list of features to use for KNN
+        @return:
+            test_data_list: list of test data
         '''
         test_data = self.test_data
         test_data_list = []
         # organize the test data into pairs one by one
-
-        for ind1 in tqdm(range(len(test_data))):
-            for ind2 in range(ind1, len(test_data)):
-                tmp_dict = {}
-                for col in self.DATA.FEATURES[:-1]:
-                    tmp_dict[col+'_1'] = test_data[col].iloc[ind1]
-                    tmp_dict[col+'_2'] = test_data[col].iloc[ind2]
-                test_data_list.append(tmp_dict)
-
+        if full_match:
+            print("organizing test_data into pairs using full match method...")
+            for ind1 in tqdm(range(len(test_data))):
+                for ind2 in range(ind1, len(test_data)):
+                    tmp_dict = {}
+                    for col in self.DATA.FEATURES[:-1]:
+                        tmp_dict[col+'_1'] = test_data[col].iloc[ind1]
+                        tmp_dict[col+'_2'] = test_data[col].iloc[ind2]
+                    test_data_list.append(tmp_dict)
+        else:
+            if auto_gen:
+                print("generating test data...")
+                _, pairs_data = self.genereate_data(test_data, rounds, n_neighbors, features, knn_features)
+                for ind in tqdm(range(len(pairs_data)), total = len(pairs_data)):
+                    temp_dict = {}
+                    for col in pairs_data.columns:
+                        temp_dict[col] = pairs_data[col].iloc[ind]
+                    test_data_list.append(temp_dict)
+            else:
+                print("there is no test data could be organized as pairs, please check the config file")
         print("test_data_list: ", len(test_data_list))
-        return self.test_data_list
+        return test_data_list
 
-    def get_test_data_dict(self):
+    def get_test_data_dict(self, full_match = False, auto_gen = True, rounds = 2, n_neighbors = 3, features = ['id', 'latitude', 'longitude'], knn_features = ['latitude', 'longitude']):
         '''
         get the test data in dictionary format
         '''
-        test_data_list = self.get_test_data()
+        test_data_list = self.get_test_data_list(auto_gen=auto_gen, full_match=full_match, rounds=rounds, n_neighbors=n_neighbors, features=features, knn_features=knn_features)
         
         print("organizing test_data_list as dictionary format: {'text': text, 'num_entities': num_entities}")
-        test_data_dict = []
+        test_data_dict = {
+            'text': [],
+            'num_entities': [],
+            'id_1': [],
+            'id_2': [],
+        }
         for i in tqdm(range(len(test_data_list)), total = len(test_data_list)):
-            temp_dict = {}
-            temp_dict['text']= ''
+            test_data_dict['id_1'].append(test_data_list[i]['id_1'])
+            test_data_dict['id_2'].append(test_data_list[i]['id_2'])
+            text = ''
             for col in [ i + '_1' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
-                temp_dict['text'] += str(test_data_list[i][col]) + " "
-            temp_dict['text'] += '</s> <s>'
+                text += str(test_data_list[i][col]) + " "
+            text += '</s> <s>'
             for col in [ i + '_2' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
-                temp_dict['text'] += str(test_data_list[i][col]) + " "
-            temp_dict['text'] += '</s>'
+                text += str(test_data_list[i][col]) + " "
+            text += '</s>'
             
-            temp_dict['num_entities'] = {}
+            num_entities = {}
             for col in [i + '_1' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE] +   [i + '_2' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE]:
-                temp_dict['num_entities'][col] = test_data_list[i][col]
-            test_data_dict.append(temp_dict)
-        return test_data_list, test_data_dict
+                num_entities[col] = test_data_list[i][col]
+            test_data_dict['text'].append(text)
+            test_data_dict['num_entities'].append(num_entities)
+        return test_data_dict
     
 
 # TODO:
