@@ -58,35 +58,36 @@ _C.DATA.PAIRS_DATA_LIST = '../dataset/pairs_data_list.npy'
 # model config
 _C.MODEL = CN()
 _C.MODEL.IS_TRAIN = True
+_C.MODEL.DEVICE = 'cuda:0'
+_C.MODEL.LR = 0.01
+_C.MODEL.MAX_EPOCHS = 10
+# if the batch size is set to small number, 
+# then the model could be trained under less GPU memory
+# for example: whem batch_size=12, the GPU memory is just 3986mb,
+# which can be trained on a laptop with only 4GB of GPU memory 
+_C.MODEL.BATCH_SIZE = 5
+# _C.MODEL.NUM_WORKERS = 2
+_C.MODEL.WEIGHT_DECAY = 0.1
+_C.MODEL.SAVE_EVERY = 1
+_C.MODEL.SCHEDULER_STEP = 2
+_C.MODEL.MODEL_PATH = '../checkpoints/20220611_xlm-roberta-base'
+_C.MODEL.MODEL_NAME = 'model'
+_C.MODEL.VALID_SIZE = 0.1
+_C.MODEL.THRESHOLD = 0.5
+
 _C.MODEL.PRETRAINED_MODEL_PATH = '../models/xlm-roberta-base'
 _C.MODEL.PRETRAINED_MODEL_NAME = 'xlm-roberta-base'
+_C.MODEL.PRETRAINED_LAYER_NUM = 12
 _C.MODEL.DROPOUT_RATE1 = 0.15
 _C.MODEL.DROPOUT_RATE2 = 0.15
 _C.MODEL.DROPOUT_RATE3 = 0.20
 _C.MODEL.OUTPUT_DIM = 1
-_C.MODEL.INPUT_DIM = 768
-
-
-_C.MODEL.DEVICE = 'cuda:0'
-_C.MODEL.LR = 0.01
-_C.MODEL.MAX_EPOCHS = 10
-_C.MODEL.BATCH_SIZE = 4
-_C.MODEL.NUM_WORKERS = 4
-_C.MODEL.WEIGHT_DECAY = 0.1
-_C.MODEL.SAVE_EVERY = 1
-_C.MODEL.SCHEDULER_STEP = 1000
-_C.MODEL.MODEL_PATH = '../checkpoints/20220610_xlm-roberta-base_rate1_0.15_rate2_0.15_rate3_0.20_lr_0.001_epochs_10_batch_64_weight_decay_0.1'
-_C.MODEL.MODEL_NAME = 'model'
-_C.MODEL.VALID_SIZE = 0.1
-
-_C.MODEL.THRESHOLD = 0.5
-
-
+_C.MODEL.INPUT_DIM = 512
 
 # test config
 _C.TEST = CN()
 _C.TEST.RESULT_PATH = '../dataset/test_result.csv'
-_C.TEST.MODEL_PATH = '../checkpoints/20220610_xlm-roberta-base_rate1_0.15_rate2_0.15_rate3_0.20_lr_0.001_epochs_10_batch_64_weight_decay_0.1/model_1.pth'
+_C.TEST.MODEL_PATH = '../checkpoints/20220611_xlm-roberta-base/model_3.pth'
 _C.TEST.BEST_THRESHOLD = 0.45
 _C.TEST.BATCH_SIZE = 3
 _C.TEST.ROUNDS = 4

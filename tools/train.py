@@ -1,16 +1,15 @@
 import sys
-from tabnanny import verbose
-from matplotlib.pyplot import text
 sys.path.append('../')
 import torch
 from models.config.defaults import cfg
 from models.LM import LM
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
-from transformers import AutoModelForMaskedLM
 import numpy as np
 import os
 import pickle as pkl
+import random
+import gc
 
 def cal_accuracy(output, target, threshold):
     """
@@ -36,7 +35,7 @@ def cal_accuracy(output, target, threshold):
     # return accuracy
     return accuracy
 
-def validate(model, transformer, device, valid_data, threshold = None):
+def validate(model, device, valid_data, threshold = None):
     """
     Validate the model and caculate the accuracy
     @param:
@@ -50,20 +49,17 @@ def validate(model, transformer, device, valid_data, threshold = None):
     # caculate the accuracy
     accuracy = 0
     # set batch generator
-    bg = batch_generator(valid_data, cfg.MODEL.BATCH_SIZE, device,shuffle=False)
+    bg = batch_generator(valid_data, cfg.MODEL.BATCH_SIZE, shuffle=False)
     # validate
     with torch.no_grad():
         with tqdm(total=len(valid_data[0])) as pbar:
             for idx, (text, match) in enumerate(bg):
                 # set input
-                input = text
+                input = text.to(device)
                 # set target
-                target = match
+                target = match.to(device)
                 # set output
-                output = transformer(input_ids = input)['hidden_states'][-1]
-                output = torch.mean(output, dim=1)
-                output = output.reshape(output.shape[0], -1)
-                output = model(output)
+                output = model(input)
                 # set accuracy
                 accuracy += cal_accuracy(output, target, threshold)
                 # update progress bar
@@ -73,13 +69,12 @@ def validate(model, transformer, device, valid_data, threshold = None):
     # print accuracy
     print('Validation accuracy: {}'.format(accuracy))
 
-def batch_generator(data, batch_size, device,shuffle=False):
+def batch_generator(data, batch_size, shuffle=False):
     """
     Generate batch data
     @param:
         data: list of data
         batch_size: batch size
-        device: device
         shuffle: whether to shuffle
     @return:
         batch: batch data
@@ -95,7 +90,11 @@ def batch_generator(data, batch_size, device,shuffle=False):
     # return batch generator
     return batch_generator
 
-def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size = None, learning_rate = None, weight_decay = None, model_path = None, model_name = None, save_every = None, valid_size = None):
+def train(cfg, model, train_data, device = 'cpu', 
+     max_epochs = None, batch_size = None, 
+     learning_rate = None, weight_decay = None, 
+     model_path = None, model_name = None, 
+     save_every = None, valid_size = None):
     """
     Train the model
     @param:
@@ -109,22 +108,6 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         save_every: save the model every x epoches
         valid_size: size of validation set
     """
-    # set the device
-    if device.startswith("cuda"):
-        device = torch.device(device if torch.cuda.is_available() else 'cpu')
-    else:
-        device = torch.device(device)
-    # set the model to device
-    model.to(device)
-    transformer = AutoModelForMaskedLM.from_pretrained(
-        cfg.MODEL.PRETRAINED_MODEL_PATH, 
-        output_hidden_states=True, 
-        output_attentions=True).to(device)
-
-    # freeze the transformer
-    for param in transformer.parameters():
-        param.requires_grad = False
-
     # set the parameters
     if learning_rate is  None:
         learning_rate = cfg.MODEL.LR
@@ -143,23 +126,39 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
     if valid_size is  None:
         valid_size = cfg.MODEL.VALID_SIZE
 
+    # set the device
+    if device.startswith("cuda"):
+        device = torch.device(device if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device(device)
+    
+    # if the model_path not exit, then make it and save the config setting to it
+    if not os.path.exists(model_path):
+        os.makedirs(model_path)
+        # save the config to the model_path as text fomat
+        with open(os.path.join(model_path, 'config.yaml'), 'w') as f:
+            f.write(cfg.dump())
+        f.close()
+
+    # set the model to device
+    model.to(device)
+    
     print('Training model...')
     # set optimizer
-    print(model.parameters(), learning_rate)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     # set loss function
     loss_fn = torch.nn.BCELoss()
     # set scheduler
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.MODEL.SCHEDULER_STEP, gamma=0.1, verbose=False)
     # validate the model
-    train_data = TensorDataset(train_data[0].to(device), train_data[1].to(device))
+    train_data = TensorDataset(train_data[0], train_data[1])
     total = len(train_data)
     valid_size = int(total * valid_size)
     print("valid_size: " , valid_size)
     valid_data = train_data[-valid_size:]
     train_data = train_data[:-valid_size]
     # set batch generator
-    bg = batch_generator(train_data, batch_size, device, shuffle=True)
+    bg = batch_generator(train_data, batch_size, shuffle=True)
     # train
     for epoch in range(max_epochs):
         # set train mode
@@ -170,14 +169,11 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         with tqdm(total = len(train_data[0])) as pbar:
             for idx, (text, match) in enumerate(bg):
                 # set input
-                input = text
+                input = text.to(device)
                 # set target
-                target = match
+                target = match.to(device)
                 # set output
-                output = transformer(input_ids = input)['hidden_states'][-1]
-                output = torch.mean(output, dim=1)
-                output = output.reshape(output.shape[0], -1)
-                output = model(output)
+                output = model(input)
                 
                 pred = torch.sigmoid(output)
                 # set loss
@@ -191,8 +187,9 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
                 optimizer.zero_grad()
                 # update pbar
                 pbar.update(batch_size)
-                # set scheduler
-                scheduler.step()    
+
+        # set scheduler
+        scheduler.step()    
         # set loss
         total_loss = total_loss / len(train_data[0])
         # print loss
@@ -201,7 +198,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         # save model
         if (epoch + 1) % save_every == 0:
             # validate the model
-            validate(model, transformer, device, valid_data, threshold = 0.5)
+            validate(model, device, valid_data, threshold = 0.5)
             model.save_model(os.path.join(model_path, model_name+'_'+str(epoch+1)+'.pth'))
         
     # save model
@@ -215,7 +212,21 @@ def main(cfg):
     train_dataset = pkl.load(open('../dataset/train_dataset_top_5000.pkl', 'rb'))
 
     text, match = train_dataset['text'], train_dataset['match']
-    
+    ### count the match and non-match
+    # match_count = 0
+    # non_match_count = 0
+    # for i in range(len(match)):
+    #     if match[i] == 1:
+    #         match_count += 1
+    #     else:
+    #         non_match_count += 1
+    # print("match_count: ", match_count/len(match))
+    # print("non_match_count: ", non_match_count/len(match))
+   
+   
+    del train_dataset
+    gc.collect()
+
     text_t = []
     match_t = []
     for i in tqdm(range(len(text))):
@@ -225,8 +236,16 @@ def main(cfg):
     text_t = torch.tensor(text_t).reshape(len(text_t), -1)
     match_t = torch.tensor(match_t).reshape(len(match_t), -1)
 
-    data_t = (text_t, match_t)
+    # shuffle the train and validate data
+    random.seed(0)
+    indices = list(range(len(text_t)))
+    random.shuffle(indices)
+
+    text_t = text_t[indices]
+    match_t = match_t[indices]
+
     # train model
+    data_t = (text_t, match_t)
     train(cfg, model, data_t, device = cfg.MODEL.DEVICE)
 
 if __name__ == "__main__":
