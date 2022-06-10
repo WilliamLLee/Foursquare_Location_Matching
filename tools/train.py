@@ -211,7 +211,7 @@ def main(cfg):
     # train codes
     # load model
     model = LM(cfg)
-    train_dataset = pkl.load(open('../dataset/train_dataset_top_5000.pkl', 'rb'))
+    train_dataset = pkl.load(open('../dataset/train_dataset_4000.pkl', 'rb'))
 
     text, match = train_dataset['text'], train_dataset['match']
     
