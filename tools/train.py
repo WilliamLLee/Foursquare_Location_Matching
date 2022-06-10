@@ -1,5 +1,6 @@
 import sys
 from tabnanny import verbose
+from matplotlib.pyplot import text
 sys.path.append('../')
 import torch
 from models.config.defaults import cfg
@@ -109,7 +110,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         valid_size: size of validation set
     """
     # set the device
-    if device.startwith("cuda"):
+    if device.startswith("cuda"):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
     else:
         device = torch.device(device)
@@ -120,8 +121,10 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         output_hidden_states=True, 
         output_attentions=True).to(device)
 
+    # freeze the transformer
     for param in transformer.parameters():
         param.requires_grad = False
+
     # set the parameters
     if learning_rate is  None:
         learning_rate = cfg.MODEL.LR
@@ -147,12 +150,12 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
     # set loss function
     loss_fn = torch.nn.BCELoss()
     # set scheduler
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=save_every, gamma=0.1, verbose=True)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.MODEL.SCHEDULER_STEP, gamma=0.1, verbose=True)
     # validate the model
     train_data = TensorDataset(train_data[0].to(device), train_data[1].to(device))
     total = len(train_data)
     valid_size = int(total * valid_size)
-    print("valid_size :" , valid_size)
+    print("valid_size: " , valid_size)
     valid_data = train_data[-valid_size:]
     train_data = train_data[:-valid_size]
     # set batch generator
@@ -166,8 +169,6 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         # train
         with tqdm(total = len(train_data[0])) as pbar:
             for idx, (text, match) in enumerate(bg):
-                # set optimizer
-                optimizer.zero_grad()
                 # set input
                 input = text
                 # set target
@@ -179,19 +180,23 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
                 output = model(output)
                 # set loss
                 loss = loss_fn(output, target)
+                # set optimizer, clear the grad
+                optimizer.zero_grad()
+
                 # backward
                 loss.backward()
-                total_loss += loss.item()
+                total_loss += loss.detach().item()
                 # optimize
                 optimizer.step()
                 # update pbar
                 pbar.update(batch_size)
+                # set scheduler
+                scheduler.step()    
         # set loss
         total_loss = total_loss / len(train_data[0])
         # print loss
         print('Epoch: {}/{}, Loss: {}'.format(epoch + 1, max_epochs, total_loss))
-        # set scheduler
-        scheduler.step()
+        
         # save model
         if (epoch + 1) % save_every == 0:
             # validate the model
@@ -206,8 +211,8 @@ def main(cfg):
     # train codes
     # load model
     model = LM(cfg)
-    train_dataset = pkl.load(open('../dataset/train_dataset_4000.pkl', 'rb'))
-    
+    train_dataset = pkl.load(open('../dataset/train_dataset_top_5000.pkl', 'rb'))
+
     text, match = train_dataset['text'], train_dataset['match']
     
     text_t = []
@@ -215,7 +220,7 @@ def main(cfg):
     for i in tqdm(range(len(text))):
         text_t.append(text[i]['input_ids'].tolist())
         match_t.append(float(match[i]))
-    print(len(text_t), len(match_t))
+    print("text size: ", len(text_t), "match_size:" ,len(match_t))
     text_t = torch.tensor(text_t).reshape(len(text_t), -1)
     match_t = torch.tensor(match_t).reshape(len(match_t), -1)
 

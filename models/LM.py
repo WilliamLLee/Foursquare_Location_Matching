@@ -36,7 +36,6 @@ class LM(torch.nn.Module):
         output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE3)
         output = self.batch_norm_3(output)
         output = self.linear_4(output)
-        output = torch.sigmoid(output)
         return output
 
     def predict(self, input_data, threshold = None):
