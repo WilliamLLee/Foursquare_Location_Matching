@@ -150,7 +150,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
     # set loss function
     loss_fn = torch.nn.BCELoss()
     # set scheduler
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.MODEL.SCHEDULER_STEP, gamma=0.1, verbose=True)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.MODEL.SCHEDULER_STEP, gamma=0.1, verbose=False)
     # validate the model
     train_data = TensorDataset(train_data[0].to(device), train_data[1].to(device))
     total = len(train_data)
@@ -178,16 +178,17 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
                 output = torch.mean(output, dim=1)
                 output = output.reshape(output.shape[0], -1)
                 output = model(output)
+                
+                pred = torch.sigmoid(output)
                 # set loss
-                loss = loss_fn(output, target)
-                # set optimizer, clear the grad
-                optimizer.zero_grad()
-
+                loss = loss_fn(pred, target)
                 # backward
                 loss.backward()
-                total_loss += loss.detach().item()
+                total_loss += loss.item()
                 # optimize
                 optimizer.step()
+                # set optimizer, clear the grad
+                optimizer.zero_grad()
                 # update pbar
                 pbar.update(batch_size)
                 # set scheduler
@@ -211,7 +212,7 @@ def main(cfg):
     # train codes
     # load model
     model = LM(cfg)
-    train_dataset = pkl.load(open('../dataset/train_dataset_4000.pkl', 'rb'))
+    train_dataset = pkl.load(open('../dataset/train_dataset_top_5000.pkl', 'rb'))
 
     text, match = train_dataset['text'], train_dataset['match']
     
