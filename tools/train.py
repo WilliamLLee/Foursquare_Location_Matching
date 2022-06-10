@@ -187,7 +187,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
                 # update pbar
                 pbar.update(batch_size)
         # set loss
-        loss = loss / len(train_data[0])
+        total_loss = total_loss / len(train_data[0])
         # print loss
         print('Epoch: {}/{}, Loss: {}'.format(epoch + 1, max_epochs, loss))
         # set scheduler
@@ -206,7 +206,7 @@ def main(cfg):
     # train codes
     # load model
     model = LM(cfg)
-    train_dataset = pkl.load(open('../dataset/train_dataset_1_4.pkl', 'rb'))
+    train_dataset = pkl.load(open('../dataset/train_dataset_4000.pkl', 'rb'))
     
     text, match = train_dataset['text'], train_dataset['match']
     
