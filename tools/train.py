@@ -189,7 +189,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         # set loss
         total_loss = total_loss / len(train_data[0])
         # print loss
-        print('Epoch: {}/{}, Loss: {}'.format(epoch + 1, max_epochs, loss))
+        print('Epoch: {}/{}, Loss: {}'.format(epoch + 1, max_epochs, total_loss))
         # set scheduler
         scheduler.step()
         # save model
