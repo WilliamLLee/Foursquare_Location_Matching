@@ -1,4 +1,5 @@
 import sys
+from tabnanny import verbose
 sys.path.append('../')
 import torch
 from models.config.defaults import cfg
@@ -108,7 +109,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
         valid_size: size of validation set
     """
     # set the device
-    if device == "cuda":
+    if device.startwith("cuda"):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
     else:
         device = torch.device(device)
@@ -146,7 +147,7 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
     # set loss function
     loss_fn = torch.nn.BCELoss()
     # set scheduler
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=save_every, gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=save_every, gamma=0.1, verbose=True)
     # validate the model
     train_data = TensorDataset(train_data[0].to(device), train_data[1].to(device))
     total = len(train_data)
@@ -154,15 +155,14 @@ def train(cfg, model, train_data, device = 'cpu',  max_epochs = None, batch_size
     print("valid_size :" , valid_size)
     valid_data = train_data[-valid_size:]
     train_data = train_data[:-valid_size]
-
+    # set batch generator
+    bg = batch_generator(train_data, batch_size, device, shuffle=True)
     # train
     for epoch in range(max_epochs):
         # set train mode
         model.train()
         # set loss
         total_loss = 0  
-        # set batch generator
-        bg = batch_generator(train_data, batch_size, device, shuffle=True)
         # train
         with tqdm(total = len(train_data[0])) as pbar:
             for idx, (text, match) in enumerate(bg):
@@ -206,7 +206,7 @@ def main(cfg):
     # train codes
     # load model
     model = LM(cfg)
-    train_dataset = pkl.load(open('../dataset/train_dataset_4000.pkl', 'rb'))
+    train_dataset = pkl.load(open('../dataset/train_dataset_1_4.pkl', 'rb'))
     
     text, match = train_dataset['text'], train_dataset['match']
     

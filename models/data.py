@@ -166,7 +166,7 @@ class DATA:
             temp_dict['text'] += '</s> <s>'
             for col in [ i + '_2' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
                 temp_dict['text'] += str(pairs_data_list[i][col]) + " "
-            temp_dict['text'] += '</s>'
+            # temp_dict['text'] += '</s>'
             # TODO: add the process for the numerical entities.
             temp_dict['num_entities'] = {}
             for col in [i + '_1' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE] +   [i + '_2' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE]:
@@ -249,7 +249,7 @@ class DATA:
             text += '</s> <s>'
             for col in [ i + '_2' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
                 text += str(test_data_list[i][col]) + " "
-            text += '</s>'
+            # text += '</s>'
             
             num_entities = {}
             for col in [i + '_1' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE] +   [i + '_2' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE]:
