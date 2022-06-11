@@ -147,44 +147,63 @@ def train(cfg, model, train_data, device = 'cpu',
     # set optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     # set loss function
-    loss_fn = torch.nn.BCELoss()
+    loss_fn = torch.nn.BCEWithLogitsLoss()
     # set scheduler
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.MODEL.SCHEDULER_STEP, gamma=0.1, verbose=False)
     # validate the model
     train_data = TensorDataset(train_data[0], train_data[1])
+    
     total = len(train_data)
     valid_size = int(total * valid_size)
     print("valid_size: " , valid_size)
     valid_data = train_data[-valid_size:]
     train_data = train_data[:-valid_size]
-    # set batch generator
-    bg = batch_generator(train_data, batch_size, shuffle=True)
+
+    # train_data = valid_data 
+
+    match_count = 0
+    non_match_count = 0
+    for i in range(len(train_data[1])):
+        if train_data[1][i] == 1:
+            match_count += 1
+        else:
+            non_match_count += 1
+    print("match_count: ", match_count/len(train_data[1]))
+    print("non_match_count: ", non_match_count/len(train_data[1]))
+    
     # train
     for epoch in range(max_epochs):
         # set train mode
         model.train()
         # set loss
         total_loss = 0  
+        # set batch generator
+        bg = batch_generator(train_data, batch_size, shuffle=True)
         # train
         with tqdm(total = len(train_data[0])) as pbar:
             for idx, (text, match) in enumerate(bg):
+                # set optimizer, clear the grad
+                optimizer.zero_grad()
                 # set input
                 input = text.to(device)
                 # set target
                 target = match.to(device)
                 # set output
                 output = model(input)
-                
-                pred = torch.sigmoid(output)
+            
+                # print(torch.sigmoid(output), target)
+                # print(torch.sigmoid(output).shape, target.shape)
+
                 # set loss
-                loss = loss_fn(pred, target)
+                loss = loss_fn(output, target)
+                # print(idx, "loss: ", loss)
+                
                 # backward
                 loss.backward()
-                total_loss += loss.item()
-                # optimize
+                # update the parameters
                 optimizer.step()
-                # set optimizer, clear the grad
-                optimizer.zero_grad()
+                # set total loss
+                total_loss += loss.item()
                 # update pbar
                 pbar.update(batch_size)
 
@@ -198,6 +217,7 @@ def train(cfg, model, train_data, device = 'cpu',
         # save model
         if (epoch + 1) % save_every == 0:
             # validate the model
+            scheduler.get_last_lr()
             validate(model, device, valid_data, threshold = 0.5)
             model.save_model(os.path.join(model_path, model_name+'_'+str(epoch+1)+'.pth'))
         
@@ -209,19 +229,20 @@ def main(cfg):
     # train codes
     # load model
     model = LM(cfg)
-    train_dataset = pkl.load(open('../dataset/train_dataset_top_5000.pkl', 'rb'))
+    train_dataset = pkl.load(open('../dataset/pair_train_dataset_200000.pkl', 'rb'))
 
-    text, match = train_dataset['text'], train_dataset['match']
-    ### count the match and non-match
-    # match_count = 0
-    # non_match_count = 0
-    # for i in range(len(match)):
-    #     if match[i] == 1:
-    #         match_count += 1
-    #     else:
-    #         non_match_count += 1
-    # print("match_count: ", match_count/len(match))
-    # print("non_match_count: ", non_match_count/len(match))
+    text, match = train_dataset['text'][:2000], train_dataset['match'][:2000]
+    
+    ## count the match and non-match
+    match_count = 0
+    non_match_count = 0
+    for i in range(len(match)):
+        if match[i] == 1:
+            match_count += 1
+        else:
+            non_match_count += 1
+    print("match_count: ", match_count/len(match))
+    print("non_match_count: ", non_match_count/len(match))
    
    
     del train_dataset
@@ -231,7 +252,10 @@ def main(cfg):
     match_t = []
     for i in tqdm(range(len(text))):
         text_t.append(text[i]['input_ids'].tolist())
-        match_t.append(float(match[i]))
+        if i < 60:
+            match_t.append(float(match[i]))
+        else:
+            match_t.append(float(0))
     print("text size: ", len(text_t), "match_size:" ,len(match_t))
     text_t = torch.tensor(text_t).reshape(len(text_t), -1)
     match_t = torch.tensor(match_t).reshape(len(match_t), -1)

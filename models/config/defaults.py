@@ -59,30 +59,30 @@ _C.DATA.PAIRS_DATA_LIST = '../dataset/pairs_data_list.npy'
 _C.MODEL = CN()
 _C.MODEL.IS_TRAIN = True
 _C.MODEL.DEVICE = 'cuda:0'
-_C.MODEL.LR = 0.01
+_C.MODEL.LR = 0.1
 _C.MODEL.MAX_EPOCHS = 10
 # if the batch size is set to small number, 
 # then the model could be trained under less GPU memory
 # for example: whem batch_size=12, the GPU memory is just 3986mb,
 # which can be trained on a laptop with only 4GB of GPU memory 
-_C.MODEL.BATCH_SIZE = 5
+_C.MODEL.BATCH_SIZE = 6
 # _C.MODEL.NUM_WORKERS = 2
-_C.MODEL.WEIGHT_DECAY = 0.1
+_C.MODEL.WEIGHT_DECAY = 0.01
 _C.MODEL.SAVE_EVERY = 1
 _C.MODEL.SCHEDULER_STEP = 2
-_C.MODEL.MODEL_PATH = '../checkpoints/20220611_xlm-roberta-base'
+_C.MODEL.MODEL_PATH = '../checkpoints/test_20220611_xlm-roberta-base'
 _C.MODEL.MODEL_NAME = 'model'
-_C.MODEL.VALID_SIZE = 0.1
+_C.MODEL.VALID_SIZE = 0.01
 _C.MODEL.THRESHOLD = 0.5
 
 _C.MODEL.PRETRAINED_MODEL_PATH = '../models/xlm-roberta-base'
 _C.MODEL.PRETRAINED_MODEL_NAME = 'xlm-roberta-base'
-_C.MODEL.PRETRAINED_LAYER_NUM = 12
+_C.MODEL.PRETRAINED_LAYER_NUM = 100    # 202 layers
 _C.MODEL.DROPOUT_RATE1 = 0.15
 _C.MODEL.DROPOUT_RATE2 = 0.15
 _C.MODEL.DROPOUT_RATE3 = 0.20
 _C.MODEL.OUTPUT_DIM = 1
-_C.MODEL.INPUT_DIM = 512
+_C.MODEL.INPUT_DIM = 256
 
 # test config
 _C.TEST = CN()

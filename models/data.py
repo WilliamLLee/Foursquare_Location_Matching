@@ -163,7 +163,7 @@ class DATA:
             temp_dict['text'] = ''
             for col in [ i + '_1' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
                 temp_dict['text'] += str(pairs_data_list[i][col]) + " "
-            temp_dict['text'] += '</s> <s>'
+            temp_dict['text'] += ' '
             for col in [ i + '_2' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
                 temp_dict['text'] += str(pairs_data_list[i][col]) + " "
             # temp_dict['text'] += '</s>'
@@ -246,7 +246,7 @@ class DATA:
             text = ''
             for col in [ i + '_1' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
                 text += str(test_data_list[i][col]) + " "
-            text += '</s> <s>'
+            text += ' '
             for col in [ i + '_2' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
                 text += str(test_data_list[i][col]) + " "
             # text += '</s>'

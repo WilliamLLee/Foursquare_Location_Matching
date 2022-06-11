@@ -9,13 +9,13 @@ import gc
 
 def main(cfg):
     # #  reseting the config
-    # cfg.DATA.DATA_SAVED = False
-    # cfg.DATA.PAIRS_DATA_DICT = ""
-    # cfg.DATA.PAIRS_DATA_LIST = ""
+    cfg.DATA.DATA_SAVED = False
+    cfg.DATA.PAIRS_DATA_DICT = ""
+    cfg.DATA.PAIRS_DATA_LIST = ""
     # load data class 
     D = DATA(cfg)
 
-    data = D.get_pair_train_data_dict(auto_gen=True, rounds = 2, n_neighbors = 2, features = cfg.DATA.FEATURES)
+    data = D.get_pair_train_data_dict(auto_gen=False, rounds = 2, n_neighbors = 2, features = cfg.DATA.FEATURES)
     
     tokenizer = AutoTokenizer.from_pretrained(cfg.DATA.TOKENIZER_PATH)
 
@@ -36,13 +36,13 @@ def main(cfg):
             ))
         match.append(data[i]['match'])
         if (i + 1) % save_every == 0:
-            path = '../dataset/train_dataset_'+str(i+1)+'.pkl'
+            path = '../dataset/pair_train_dataset_'+str(i+1)+'.pkl'
             pkl.dump({'text':text, 'match':match}, open(path, 'wb'))
             text = []
             match = []
             gc.collect()
     
-    path = '../dataset/train_dataset_last_'+str(len(text))+'.pkl'
+    path = '../dataset/pair_train_dataset_last_'+str(len(text))+'.pkl'
     pkl.dump({'text':text, 'match':match}, open(path, 'wb'))
     # finished in about 18 minutes
 

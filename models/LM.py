@@ -13,9 +13,9 @@ class LM(torch.nn.Module):
         # self.batch_norm_1 = nn.BatchNorm1d(1024)
         # self.linear_2 = nn.Linear(1024, 512)
         # self.batch_norm_2 = nn.BatchNorm1d(512)
-        self.linear_3 = nn.Linear(512, 256)
-        self.batch_norm_3 = nn.BatchNorm1d(256)
-        self.linear_4 = nn.Linear(256, cfg.MODEL.OUTPUT_DIM)
+        # self.linear_3 = nn.Linear(512, 256)
+        # self.batch_norm_3 = nn.BatchNorm1d(768)
+        self.linear_4 = nn.Linear(768, cfg.MODEL.OUTPUT_DIM)
         
         self.transformer = AutoModelForMaskedLM.from_pretrained(
                         cfg.MODEL.PRETRAINED_MODEL_PATH, 
@@ -23,6 +23,7 @@ class LM(torch.nn.Module):
                         output_attentions=True)
         # freeze the former n-1 layers of transformer, and finetune the last layer
         for idx, param in enumerate(self.transformer.parameters(), 1):
+            # print('idx: ', idx, 'param: ', param)
             if idx < cfg.MODEL.PRETRAINED_LAYER_NUM:
                 param.requires_grad = False
 
@@ -37,16 +38,17 @@ class LM(torch.nn.Module):
         # linear layer to get the predictions
         output = self.transformer(input_ids = input)['hidden_states'][-1]
         output = output[:, 0, :].reshape(output.shape[0], -1)
-        output = F.adaptive_avg_pool1d(output.unsqueeze(1), self.cfg.MODEL.INPUT_DIM).squeeze(1)
+    
+        # output = F.adaptive_avg_pool1d(output.unsqueeze(1), self.cfg.MODEL.INPUT_DIM).squeeze(1)
         # output = F.relu(self.linear_1(output))
-        # output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE1)
         # output = self.batch_norm_1(output)
+        # output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE1)
         # output = F.relu(self.linear_2(output))
-        # output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE2)
         # output = self.batch_norm_2(output)
-        output = F.relu(self.linear_3(output))
-        output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE3)
-        output = self.batch_norm_3(output)
+        # output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE2)
+        # output = F.relu(self.linear_3(output))
+        # output = self.batch_norm_3(output)
+        # output = F.dropout(output, p=self.cfg.MODEL.DROPOUT_RATE3)
         output = self.linear_4(output)
         return output
 
