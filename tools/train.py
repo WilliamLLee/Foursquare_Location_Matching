@@ -3,6 +3,7 @@ sys.path.append('../')
 import torch
 from models.config.defaults import cfg
 from models.LM import LM
+from sklearn.metrics import f1_score, roc_auc_score, accuracy_score
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 import numpy as np
@@ -46,8 +47,9 @@ def validate(model, device, valid_data, threshold = None):
     """
     if threshold is None:
         threshold = cfg.MODEL.THRESHOLD
-    # caculate the accuracy
-    accuracy = 0
+    # count the pred_label and target_label
+    pred_label = []
+    target_label = []
     # set batch generator
     bg = batch_generator(valid_data, cfg.MODEL.BATCH_SIZE, shuffle=False)
     # validate
@@ -60,14 +62,22 @@ def validate(model, device, valid_data, threshold = None):
                 target = match.to(device)
                 # set output
                 output = model(input)
-                # set accuracy
-                accuracy += cal_accuracy(output, target, threshold)
+                # get the pred and set them to 0 or 1 based on the threshold
+                pred = torch.sigmoid(output).detach().cpu().numpy()
+                pred[pred < threshold] = 0
+                pred[pred >= threshold] = 1
+                # set pred_label
+                pred_label.extend(torch.sigmoid(output).detach().cpu().numpy())
+                # set target_label
+                target_label.extend(target.detach().cpu().numpy())
                 # update progress bar
                 pbar.update(cfg.MODEL.BATCH_SIZE)
-    # set accuracy
-    accuracy = accuracy / len(valid_data[0])
     # print accuracy
-    print('Validation accuracy: {}'.format(accuracy))
+    print('Validation accuracy: {}'.format(accuracy_score(target_label, pred_label)))
+    # print auc
+    print('Validation AUC: {}'.format(roc_auc_score(target_label, pred_label)))
+    # print f1  
+    print('Validation F1: {}'.format(f1_score(target_label, pred_label)))
 
 def batch_generator(data, batch_size, shuffle=False):
     """
