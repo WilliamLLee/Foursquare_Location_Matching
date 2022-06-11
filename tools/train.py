@@ -224,6 +224,19 @@ def train(cfg, model, train_data, device = 'cpu',
     # save model
     model.save_model(os.path.join(model_path, model_name+'_final.pth')) 
 
+def negative_sampling(data, negative_size):
+    """
+    negative sampling
+    @param:
+        data: list of data
+        negative_size: size of negative sampling
+    @return:
+        data: list of data
+    """
+    # set negative_size
+    negative_size = min(negative_size, len(data[0]))
+    
+
 
 def main(cfg):
     # train codes
@@ -250,12 +263,12 @@ def main(cfg):
 
     text_t = []
     match_t = []
+    
     for i in tqdm(range(len(text))):
         text_t.append(text[i]['input_ids'].tolist())
-        if i < 60:
-            match_t.append(float(match[i]))
-        else:
-            match_t.append(float(0))
+        match_t.append(float(match[i]))
+
+
     print("text size: ", len(text_t), "match_size:" ,len(match_t))
     text_t = torch.tensor(text_t).reshape(len(text_t), -1)
     match_t = torch.tensor(match_t).reshape(len(match_t), -1)
