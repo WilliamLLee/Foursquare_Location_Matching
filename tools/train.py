@@ -3,7 +3,7 @@ sys.path.append('../')
 import torch
 from models.config.defaults import cfg
 from models.LM import LM
-from sklearn.metrics import f1_score, roc_auc_score, accuracy_score
+from sklearn.metrics import f1_score, roc_auc_score, accuracy_score, precision_score, recall_score
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 import numpy as np
@@ -78,6 +78,10 @@ def validate(model, device, valid_data, threshold = None):
     print('Validation AUC: {}'.format(roc_auc_score(target_label, pred_label)))
     # print f1  
     print('Validation F1: {}'.format(f1_score(target_label, pred_label)))
+    # print precision
+    print('Validation precision: {}'.format(precision_score(target_label, pred_label)))
+    # print recall
+    print('Validation recall: {}'.format(recall_score(target_label, pred_label)))
 
 def batch_generator(data, batch_size, shuffle=False):
     """
