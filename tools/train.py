@@ -67,7 +67,7 @@ def validate(model, device, valid_data, threshold = None):
                 pred[pred < threshold] = 0
                 pred[pred >= threshold] = 1
                 # set pred_label
-                pred_label.extend(torch.sigmoid(output).detach().cpu().numpy())
+                pred_label.extend(pred)
                 # set target_label
                 target_label.extend(target.detach().cpu().numpy())
                 # update progress bar
@@ -258,7 +258,7 @@ def main(cfg):
     model = LM(cfg)
     train_dataset = pkl.load(open('../dataset/pair_train_dataset_200000.pkl', 'rb'))
 
-    text, match = train_dataset['text'][:2000], train_dataset['match'][:2000]
+    text, match = train_dataset['text'][:200], train_dataset['match'][:200]
     
     ## count the match and non-match
     match_count = 0
