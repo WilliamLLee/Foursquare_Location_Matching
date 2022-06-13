@@ -73,7 +73,7 @@ class DATA:
                     neighbors.remove(k)
                 except:
                     pass
-                    
+
                 ind1 = k
                 ind2 = neighbors[j]
                 if ind1 == ind2:
@@ -114,7 +114,7 @@ class DATA:
         pairs_data = self.pairs_data
         print("orgigin pairs_data: ", pairs_data.shape)
         if auto_gen:
-            _, gen_pairs_data = self.genereate_data(rounds, n_neighbors, features, knn_features)
+            _, gen_pairs_data = self.genereate_data(self.train_data, rounds, n_neighbors, features, knn_features)
             gen_pairs_data['match'] = gen_pairs_data.apply(lambda x: x['point_of_interest_1'] == x['point_of_interest_2'], axis = 1)  # generate match column
             gen_pairs_data.drop(['point_of_interest_1', 'point_of_interest_2'], axis = 1, inplace = True) # drop the point of interest columns
             pairs_data = pd.concat([pairs_data, gen_pairs_data], axis = 0)
@@ -152,38 +152,40 @@ class DATA:
             print("only return the 'text' and 'match' columns")
             dict_return = []
             for i in tqdm(range(len(dict_load))):
-                dict_return.append({'text': dict_load[i]['text'], 'match': dict_load[i]['match']})    
+                dict_return.append({'num_entities':dict_load[i]['num_entities'],'text': dict_load[i]['text'], 'match': dict_load[i]['match']})   
             return dict_return
 
         pairs_data_list = self.get_pair_train_data(auto_gen, rounds, n_neighbors, features, knn_features)
         print("organizing pairs_data_list as dictionary format: {'text': text, 'num_entities': num_entities, 'match': match}")
         pairs_data_dict = []
         for i in tqdm(range(len(pairs_data_list)), total = len(pairs_data_list)):
-            temp_dict = {}
-            temp_dict['text'] = ''
+            temp_dict = {} 
+
+            str1 = ""
+            str2 = ""
             for col in [ i + '_1' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
-                temp_dict['text'] += str(pairs_data_list[i][col]) + " "
-            temp_dict['text'] += ' '
+                str1 += str(pairs_data_list[i][col]) + " "
             for col in [ i + '_2' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
-                temp_dict['text'] += str(pairs_data_list[i][col]) + " "
-            # temp_dict['text'] += '</s>'
-            # TODO: add the process for the numerical entities.
+                str2 += str(pairs_data_list[i][col]) + " "
+            temp_dict['text'] = [str1,str2]
+            
             temp_dict['num_entities'] = {}
             for col in [i + '_1' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE] +   [i + '_2' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE]:
                 temp_dict['num_entities'][col] = pairs_data_list[i][col]
+
             temp_dict['match'] = pairs_data_list[i]['match']
             
             pairs_data_dict.append(temp_dict)
 
         np.save(os.path.join(self.cfg.DATA.DATA_PATH, 
-                            'pairs_data_dict.npy'), 
+                            'pairs_data_dict_s.npy'), 
                 pairs_data_dict)
         np.save(os.path.join(self.cfg.DATA.DATA_PATH,
-                            'pairs_data_list.npy'),
+                            'pairs_data_list_s.npy'),
                 pairs_data_list)
         print("pairs_data_list and pairs_data_dict are generated, saved to {} and {}".format(os.path.join(self.cfg.DATA.DATA_PATH,
-                            'pairs_data_list.npy'), os.path.join(self.cfg.DATA.DATA_PATH, 
-                            'pairs_data_dict.npy')))
+                            'pairs_data_list_s.npy'), os.path.join(self.cfg.DATA.DATA_PATH, 
+                            'pairs_data_dict_s.npy')))
 
         
         return pairs_data_dict
@@ -236,35 +238,22 @@ class DATA:
         print("organizing test_data_list as dictionary format: {'text': text, 'num_entities': num_entities}")
         test_data_dict = {
             'text': [],
-            'num_entities': [],
+            'numerical': [],
             'id_1': [],
             'id_2': [],
         }
         for i in tqdm(range(len(test_data_list)), total = len(test_data_list)):
             test_data_dict['id_1'].append(test_data_list[i]['id_1'])
             test_data_dict['id_2'].append(test_data_list[i]['id_2'])
-            text = ''
+            text1, text2 = '', ''
             for col in [ i + '_1' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
-                text += str(test_data_list[i][col]) + " "
-            text += ' '
+                text1 += str(test_data_list[i][col]) + " "
+        
             for col in [ i + '_2' for i in self.cfg.DATA.TEXT_FEATURE_TYPE]:
-                text += str(test_data_list[i][col]) + " "
-            # text += '</s>'
-            
+                text2 += str(test_data_list[i][col]) + " "
             num_entities = {}
             for col in [i + '_1' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE] +   [i + '_2' for i in self.cfg.DATA.NUMERICAL_FEATURE_TYPE]:
                 num_entities[col] = test_data_list[i][col]
-            test_data_dict['text'].append(text)
-            test_data_dict['num_entities'].append(num_entities)
-        return test_data_dict
-    
-
-# TODO:
-# 1. 决定好用什么特征  （除url外，其他文本特征均使用了，剩余的特征为数值特征）
-# 2. 对数据进行预处理，比如：
-#    a. 对数据进行分词 
-#    b. 对数据进行编码 
-# 3. 使用数据进行训练，训练一个文本相似度模型（可作为baseline提交，将这个任务看做是短文本匹配的任务）
-# 4. 使用数据进行预测，预测一个文本相似度，并且提交结果
-# 5. 使用决策树等模型进一步进行匹配度计算，并且提交结果，可以将文本相似匹配度看做是一个增强特征
-    
+            test_data_dict['text'].append([text1, text2])
+            test_data_dict['numerical'].append(num_entities)
+        return test_data_dict    

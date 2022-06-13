@@ -11,6 +11,35 @@ import os
 import pickle as pkl
 import random
 import gc
+from transformers import AutoModelForMaskedLM, XLMRobertaModel
+import logging
+
+
+#if is a number
+def is_number(s):
+    """
+    Determine if it is a number
+    @param:
+        s: string
+    @return:
+        bool
+    """
+    if str(s) == 'nan':
+        return False
+    try:
+        float(s)
+        return True
+    except ValueError:
+        pass
+    try:
+        import unicodedata
+        unicodedata.numeric(s)
+        return True
+    except (TypeError, ValueError):
+        pass
+ 
+    return False
+
 
 def cal_accuracy(output, target, threshold):
     """
@@ -36,7 +65,7 @@ def cal_accuracy(output, target, threshold):
     # return accuracy
     return accuracy
 
-def validate(model, device, valid_data, threshold = None):
+def validate(logger, model, transformer, device, valid_data, threshold = None):
     """
     Validate the model and caculate the accuracy
     @param:
@@ -55,13 +84,23 @@ def validate(model, device, valid_data, threshold = None):
     # validate
     with torch.no_grad():
         with tqdm(total=len(valid_data[0])) as pbar:
-            for idx, (text, match) in enumerate(bg):
-                # set input
-                input = text.to(device)
-                # set target
+            for idx, (text1, text2, numerical,match) in enumerate(bg):
+                
                 target = match.to(device)
-                # set output
-                output = model(input)
+
+                numerical = numerical.to(device)
+                
+                input1 = text1.to(device)
+                input2 = text2.to(device)
+
+                output1 = transformer(input_ids = input1)
+                output1 = output1.pooler_output
+                output2 = transformer(input_ids = input2)
+                output2 = output2.pooler_output
+
+                output = torch.cat((output1,output2),axis = 1)
+                output = model(output,numerical)
+                
                 # get the pred and set them to 0 or 1 based on the threshold
                 pred = torch.sigmoid(output).detach().cpu().numpy()
                 pred[pred < threshold] = 0
@@ -83,6 +122,19 @@ def validate(model, device, valid_data, threshold = None):
     # print recall
     print('Validation recall: {}'.format(recall_score(target_label, pred_label)))
 
+    logger.info('************************************************')
+    # print accuracy
+    logger.info('Validation accuracy: {}'.format(accuracy_score(target_label, pred_label)))
+    # print auc
+    logger.info('Validation AUC: {}'.format(roc_auc_score(target_label, pred_label)))
+    # print f1  
+    logger.info('Validation F1: {}'.format(f1_score(target_label, pred_label)))
+    # print precision
+    logger.info('Validation precision: {}'.format(precision_score(target_label, pred_label)))
+    # print recall
+    logger.info('Validation recall: {}'.format(recall_score(target_label, pred_label)))
+    logger.info('************************************************')
+
 def batch_generator(data, batch_size, shuffle=False):
     """
     Generate batch data
@@ -93,8 +145,7 @@ def batch_generator(data, batch_size, shuffle=False):
     @return:
         batch: batch data
     """
-    
-    data_t = TensorDataset(data[0], data[1])
+    data_t = TensorDataset(data[0], data[1], data[2], data[3])
     # set batch size
     batch_size = min(batch_size, len(data_t))
     # set batch generator
@@ -154,8 +205,24 @@ def train(cfg, model, train_data, device = 'cpu',
             f.write(cfg.dump())
         f.close()
 
+    # set logger
+    logging.basicConfig(filename = os.path.join(cfg.MODEL.MODEL_PATH, 'log.txt'),
+                        format = '%(asctime)s-%(name)s-%(levelname)s-%(message)s-%(funcName)s:%(lineno)d',
+                        datefmt = '%d %b %Y, %a %H:%M:%S',
+                        level=logging.DEBUG,
+                        encoding = 'utf-8',
+                        filemode = 'w')
+
+    logger = logging.getLogger()
+    logger.info(cfg.dump())
+    logger.info('begin logging...')
+
     # set the model to device
     model.to(device)
+
+    transformer = XLMRobertaModel.from_pretrained("xlm-roberta-base").to(device)
+    for idx, param in enumerate(transformer.parameters()):
+        param.requires_grad = False
     
     print('Training model...')
     # set optimizer
@@ -165,7 +232,7 @@ def train(cfg, model, train_data, device = 'cpu',
     # set scheduler
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.MODEL.SCHEDULER_STEP, gamma=0.1, verbose=False)
     # validate the model
-    train_data = TensorDataset(train_data[0], train_data[1])
+    train_data = TensorDataset(train_data[0], train_data[1],train_data[2],train_data[3])
     
     total = len(train_data)
     valid_size = int(total * valid_size)
@@ -173,68 +240,78 @@ def train(cfg, model, train_data, device = 'cpu',
     valid_data = train_data[-valid_size:]
     train_data = train_data[:-valid_size]
 
-    # train_data = valid_data 
-
     match_count = 0
     non_match_count = 0
-    for i in range(len(train_data[1])):
-        if train_data[1][i] == 1:
+    for i in range(len(train_data[3])):
+        if train_data[3][i] == 1:
             match_count += 1
         else:
             non_match_count += 1
-    print("match_count: ", match_count/len(train_data[1]))
-    print("non_match_count: ", non_match_count/len(train_data[1]))
+    print("match_count: ", match_count/len(train_data[2]))
+    print("non_match_count: ", non_match_count/len(train_data[2]))
     
-    # train
-    for epoch in range(max_epochs):
-        # set train mode
-        model.train()
-        # set loss
-        total_loss = 0  
-        # set batch generator
-        bg = batch_generator(train_data, batch_size, shuffle=True)
+
+    max_iter = (max_epochs + 1)*(len(train_data[0])//batch_size)
+    iter_count = 0
+    with tqdm(total = max_iter) as pbar:
         # train
-        with tqdm(total = len(train_data[0])) as pbar:
-            for idx, (text, match) in enumerate(bg):
+        for epoch in range(max_epochs):
+            # set train mode
+            model.train()
+            # set loss
+            total_loss = 0  
+            # set batch generator
+            bg = batch_generator(train_data, batch_size, shuffle=True)
+            # train
+            for idx, (text1,text2, numerical,match) in enumerate(bg):
                 # set optimizer, clear the grad
                 optimizer.zero_grad()
                 # set input
-                input = text.to(device)
+                input1 = text1.to(device)
+                input2 = text2.to(device)
+
+                #numerical feature
+                numerical = numerical.to(device)
+
                 # set target
+                output1 = transformer(input_ids = input1)
+                output1 = output1.pooler_output
+                output2 = transformer(input_ids = input2)
+                output2 = output2.pooler_output  
+
+                #merge text   
+                output = torch.cat((output1,output2),axis = 1)
                 target = match.to(device)
                 # set output
-                output = model(input)
-            
-                # print(torch.sigmoid(output), target)
-                # print(torch.sigmoid(output).shape, target.shape)
+                output = model(output,numerical)
 
                 # set loss
-                loss = loss_fn(output, target)
-                # print(idx, "loss: ", loss)
-                
+                loss = loss_fn(output, target)              
                 # backward
                 loss.backward()
                 # update the parameters
                 optimizer.step()
                 # set total loss
                 total_loss += loss.item()
+                # set scheduler
+                scheduler.step()   
                 # update pbar
-                pbar.update(batch_size)
+                pbar.update(1)
+                iter_count += 1
+                # save model
+                if (iter_count) % save_every == 0:
+                    # validate the model
+                    print("current learning rate: ",scheduler.get_last_lr())
+                    logger.info('{} epoch, {} iteration\'s loss: {}'.format(epoch ,iter_count, loss.item()))
+                    logger.info("current learning rate: {}".format(scheduler.get_last_lr()))
+                    validate(logger, model,transformer,device, valid_data, threshold = 0.5)
+                    model.save_model(os.path.join(model_path, model_name+'_'+str(iter_count)+'.pth'))
 
-        # set scheduler
-        scheduler.step()    
         # set loss
         total_loss = total_loss / len(train_data[0])
         # print loss
         print('Epoch: {}/{}, Loss: {}'.format(epoch + 1, max_epochs, total_loss))
-        
-        # save model
-        if (epoch + 1) % save_every == 0:
-            # validate the model
-            scheduler.get_last_lr()
-            validate(model, device, valid_data, threshold = 0.5)
-            model.save_model(os.path.join(model_path, model_name+'_'+str(epoch+1)+'.pth'))
-        
+        logger.info('Epoch: {}/{}, Loss: {}'.format(epoch + 1, max_epochs, total_loss))
     # save model
     model.save_model(os.path.join(model_path, model_name+'_final.pth')) 
 
@@ -256,47 +333,86 @@ def main(cfg):
     # train codes
     # load model
     model = LM(cfg)
-    train_dataset = pkl.load(open('../dataset/pair_train_dataset_200000.pkl', 'rb'))
 
-    text, match = train_dataset['text'][:200], train_dataset['match'][:200]
+    #load model
+    #model.load_model('/home/yushenglong/ML/Foursquare_Location_Matching/checkpoints/test_1597274/model_65000.pth')
+
+    # load data from multiple files
+    file_path_list = [
+        '../dataset/numerical_datas/pair_train_dataset_last_397274.pkl',
+    ]
+    for i in range(400000, 1600000, 400000):
+        file_path_list.append('../dataset/numerical_datas/pair_train_dataset_'+str(i)+'.pkl')
+    print(file_path_list)
+
+    train_data = {
+        'text': [],
+        'match': [],
+        'numerical' : [], 
+    }
+    for path in file_path_list:
+        print(path)
+        cur_data = pkl.load(open(path, 'rb'))
+        train_data['text'].extend(cur_data['text'])
+        train_data['match'].extend(cur_data['match'])
+        train_data['numerical'].extend(cur_data['numerical'])
+
+    print("load over")
+
+    # get text and match field from train_data
+    text, match,numerical= train_data['text'], train_data['match'],train_data['numerical']
     
+    
+    #reduced memory usage
+    del train_data
+    gc.collect()
+
     ## count the match and non-match
     match_count = 0
     non_match_count = 0
-    for i in range(len(match)):
+    for i in tqdm(range(len(match))):
         if match[i] == 1:
             match_count += 1
         else:
             non_match_count += 1
     print("match_count: ", match_count/len(match))
     print("non_match_count: ", non_match_count/len(match))
-   
-   
-    del train_dataset
-    gc.collect()
 
-    text_t = []
+    text_t1 = []
+    text_t2 = []
+    numerical_t = []
     match_t = []
     
     for i in tqdm(range(len(text))):
-        text_t.append(text[i]['input_ids'].tolist())
+        text_t1.append(text[i][0]['input_ids'].tolist())
+        text_t2.append(text[i][1]['input_ids'].tolist())
+        temp = []
+        for item in numerical[i]:
+            #preprocess & padding
+            if is_number(str(numerical[i][item])) == False:
+                temp.append(-1)
+            else:
+                temp.append(float(numerical[i][item]))
+        numerical_t.append(temp)
         match_t.append(float(match[i]))
 
 
-    print("text size: ", len(text_t), "match_size:" ,len(match_t))
-    text_t = torch.tensor(text_t).reshape(len(text_t), -1)
+    print("text size: ", len(text_t1), "match_size:" ,len(match_t))
+    text_t1 = torch.tensor(text_t1).reshape(len(text_t1), -1)
+    text_t2 = torch.tensor(text_t2).reshape(len(text_t2), -1)
+    numerical_t = torch.tensor(numerical_t).reshape(len(numerical_t), -1)
     match_t = torch.tensor(match_t).reshape(len(match_t), -1)
-
+    
     # shuffle the train and validate data
     random.seed(0)
-    indices = list(range(len(text_t)))
+    indices = list(range(len(text_t1)))
     random.shuffle(indices)
-
-    text_t = text_t[indices]
+    text_t1 = text_t1[indices]
+    text_t2 = text_t2[indices]
     match_t = match_t[indices]
 
     # train model
-    data_t = (text_t, match_t)
+    data_t = (text_t1, text_t2,numerical_t,match_t)
     train(cfg, model, data_t, device = cfg.MODEL.DEVICE)
 
 if __name__ == "__main__":
