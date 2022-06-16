@@ -11,3 +11,7 @@ Download the dataset from kuggle compitation site [page](https://www.kaggle.com/
         test.csv
         train.csv
 ```
+
+The open report is here: [open report](./files/1%20开题报告.docx)
+
+The final report of this work is here: [final report](./files/2%20研究报告.docx)

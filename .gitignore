@@ -1,6 +1,7 @@
 # user self-defined settings
 dataset/* 
-
+checkpoints/*
+!checkpoints/LM_small_65000.pth
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
